@@ -668,7 +668,7 @@ class McpServer extends Base
                     if ($projectId <= 0) {
                         return $this->createToolExecutionErrorResponse('Invalid arguments: project_id must be a positive integer', $id);
                     }
-                    $result = $this->container['projectModel']->getByIdWithOwner($projectId);
+                    $result = $this->container['projectModel']->getById($projectId);
                     break;
 
                 case 'update_project':
