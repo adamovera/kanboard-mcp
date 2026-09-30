@@ -4,7 +4,10 @@ declare(strict_types=1);
 namespace Kanboard\Plugin\ModelContextProtocol\Core;
 
 use Kanboard\Core\Base;
+use Kanboard\Core\Security\Role;
 use Kanboard\Model\ColumnModel;
+use Kanboard\Model\ProjectModel;
+use Kanboard\Model\SubtaskModel;
 use Kanboard\Model\TaskModel;
 use InvalidArgumentException;
 use Throwable;
@@ -123,7 +126,7 @@ class McpServer extends Base
                     'serverInfo' => [
                         'name' => 'kanboard-mcp',
                         'title' => 'Kanboard MCP Server',
-                        'version' => '1.0.0',
+                        'version' => '1.1.0',
                         'description' => 'Kanboard project-management tools and resources via MCP.',
                     ],
                     'instructions' => 'Use the available Kanboard tools to manage projects, tasks, columns, categories, and swimlanes.',
@@ -170,7 +173,8 @@ class McpServer extends Base
                     'type' => 'object',
                     'properties' => [
                         'name' => ['type' => 'string', 'description' => 'Project name'],
-                        'description' => ['type' => 'string', 'description' => 'Project description']
+                        'description' => ['type' => 'string', 'description' => 'Project description'],
+                        'owner_id' => ['type' => 'integer', 'description' => 'Kanboard user ID to set as project owner and project manager']
                     ],
                     'required' => ['name']
                 ]
@@ -475,6 +479,221 @@ class McpServer extends Base
             ]
         ];
         
+        $tools = array_merge($tools, [
+            [
+                'name' => 'get_project',
+                'description' => 'Get one project by ID',
+                'inputSchema' => [
+                    'type' => 'object',
+                    'properties' => [
+                        'project_id' => ['type' => 'integer', 'description' => 'Project ID'],
+                    ],
+                    'required' => ['project_id'],
+                ],
+            ],
+            [
+                'name' => 'update_project',
+                'description' => 'Update project name, description, or owner',
+                'inputSchema' => [
+                    'type' => 'object',
+                    'properties' => [
+                        'project_id' => ['type' => 'integer', 'description' => 'Project ID'],
+                        'name' => ['type' => 'string', 'description' => 'Project name'],
+                        'description' => ['type' => 'string', 'description' => 'Project description'],
+                        'owner_id' => ['type' => 'integer', 'description' => 'Kanboard user ID to set as owner'],
+                    ],
+                    'required' => ['project_id'],
+                ],
+            ],
+            [
+                'name' => 'enable_project',
+                'description' => 'Enable an inactive project',
+                'inputSchema' => [
+                    'type' => 'object',
+                    'properties' => [
+                        'project_id' => ['type' => 'integer', 'description' => 'Project ID'],
+                    ],
+                    'required' => ['project_id'],
+                ],
+            ],
+            [
+                'name' => 'disable_project',
+                'description' => 'Disable/archive an active project',
+                'inputSchema' => [
+                    'type' => 'object',
+                    'properties' => [
+                        'project_id' => ['type' => 'integer', 'description' => 'Project ID'],
+                    ],
+                    'required' => ['project_id'],
+                ],
+            ],
+            [
+                'name' => 'get_project_users',
+                'description' => 'List users directly assigned to a project and their project roles',
+                'inputSchema' => [
+                    'type' => 'object',
+                    'properties' => [
+                        'project_id' => ['type' => 'integer', 'description' => 'Project ID'],
+                    ],
+                    'required' => ['project_id'],
+                ],
+            ],
+            [
+                'name' => 'add_project_user',
+                'description' => 'Grant a user access to a project',
+                'inputSchema' => [
+                    'type' => 'object',
+                    'properties' => [
+                        'project_id' => ['type' => 'integer', 'description' => 'Project ID'],
+                        'user_id' => ['type' => 'integer', 'description' => 'User ID'],
+                        'role' => [
+                            'type' => 'string',
+                            'description' => 'Project role',
+                            'enum' => [Role::PROJECT_MANAGER, Role::PROJECT_MEMBER, Role::PROJECT_VIEWER],
+                            'default' => Role::PROJECT_MEMBER,
+                        ],
+                    ],
+                    'required' => ['project_id', 'user_id'],
+                ],
+            ],
+            [
+                'name' => 'change_project_user_role',
+                'description' => 'Change an existing project user role',
+                'inputSchema' => [
+                    'type' => 'object',
+                    'properties' => [
+                        'project_id' => ['type' => 'integer', 'description' => 'Project ID'],
+                        'user_id' => ['type' => 'integer', 'description' => 'User ID'],
+                        'role' => [
+                            'type' => 'string',
+                            'description' => 'Project role',
+                            'enum' => [Role::PROJECT_MANAGER, Role::PROJECT_MEMBER, Role::PROJECT_VIEWER],
+                        ],
+                    ],
+                    'required' => ['project_id', 'user_id', 'role'],
+                ],
+            ],
+            [
+                'name' => 'remove_project_user',
+                'description' => 'Remove a user from a project',
+                'inputSchema' => [
+                    'type' => 'object',
+                    'properties' => [
+                        'project_id' => ['type' => 'integer', 'description' => 'Project ID'],
+                        'user_id' => ['type' => 'integer', 'description' => 'User ID'],
+                    ],
+                    'required' => ['project_id', 'user_id'],
+                ],
+            ],
+            [
+                'name' => 'close_task',
+                'description' => 'Close a task without deleting it',
+                'inputSchema' => [
+                    'type' => 'object',
+                    'properties' => [
+                        'task_id' => ['type' => 'integer', 'description' => 'Task ID'],
+                    ],
+                    'required' => ['task_id'],
+                ],
+            ],
+            [
+                'name' => 'reopen_task',
+                'description' => 'Reopen a closed task',
+                'inputSchema' => [
+                    'type' => 'object',
+                    'properties' => [
+                        'task_id' => ['type' => 'integer', 'description' => 'Task ID'],
+                    ],
+                    'required' => ['task_id'],
+                ],
+            ],
+            [
+                'name' => 'duplicate_project',
+                'description' => 'Duplicate a project structure and optionally its permissions, categories, actions, tags, filters, metadata, and tasks',
+                'inputSchema' => [
+                    'type' => 'object',
+                    'properties' => [
+                        'project_id' => ['type' => 'integer', 'description' => 'Source project ID'],
+                        'owner_id' => ['type' => 'integer', 'description' => 'Owner/user ID for the duplicated project'],
+                        'name' => ['type' => 'string', 'description' => 'Optional name for the duplicated project'],
+                        'include_tasks' => ['type' => 'boolean', 'description' => 'Copy tasks as well as project structure', 'default' => false],
+                    ],
+                    'required' => ['project_id'],
+                ],
+            ],
+            [
+                'name' => 'delete_project',
+                'description' => 'Permanently delete a project. Requires confirm=true.',
+                'inputSchema' => [
+                    'type' => 'object',
+                    'properties' => [
+                        'project_id' => ['type' => 'integer', 'description' => 'Project ID'],
+                        'confirm' => ['type' => 'boolean', 'description' => 'Must be true to permanently delete the project'],
+                    ],
+                    'required' => ['project_id', 'confirm'],
+                ],
+            ],
+            [
+                'name' => 'get_subtasks',
+                'description' => 'List subtasks for a task',
+                'inputSchema' => [
+                    'type' => 'object',
+                    'properties' => [
+                        'task_id' => ['type' => 'integer', 'description' => 'Task ID'],
+                    ],
+                    'required' => ['task_id'],
+                ],
+            ],
+            [
+                'name' => 'create_subtask',
+                'description' => 'Create a subtask',
+                'inputSchema' => [
+                    'type' => 'object',
+                    'properties' => [
+                        'task_id' => ['type' => 'integer', 'description' => 'Task ID'],
+                        'title' => ['type' => 'string', 'description' => 'Subtask title'],
+                        'user_id' => ['type' => 'integer', 'description' => 'Optional assignee user ID'],
+                        'status' => [
+                            'type' => 'integer',
+                            'description' => '0 Todo, 1 In progress, 2 Done',
+                            'enum' => [SubtaskModel::STATUS_TODO, SubtaskModel::STATUS_INPROGRESS, SubtaskModel::STATUS_DONE],
+                        ],
+                    ],
+                    'required' => ['task_id', 'title'],
+                ],
+            ],
+            [
+                'name' => 'update_subtask',
+                'description' => 'Update a subtask title, assignee, or status',
+                'inputSchema' => [
+                    'type' => 'object',
+                    'properties' => [
+                        'subtask_id' => ['type' => 'integer', 'description' => 'Subtask ID'],
+                        'title' => ['type' => 'string', 'description' => 'Subtask title'],
+                        'user_id' => ['type' => 'integer', 'description' => 'Assignee user ID, 0 for unassigned'],
+                        'status' => [
+                            'type' => 'integer',
+                            'description' => '0 Todo, 1 In progress, 2 Done',
+                            'enum' => [SubtaskModel::STATUS_TODO, SubtaskModel::STATUS_INPROGRESS, SubtaskModel::STATUS_DONE],
+                        ],
+                    ],
+                    'required' => ['subtask_id'],
+                ],
+            ],
+            [
+                'name' => 'delete_subtask',
+                'description' => 'Permanently delete a subtask. Requires confirm=true.',
+                'inputSchema' => [
+                    'type' => 'object',
+                    'properties' => [
+                        'subtask_id' => ['type' => 'integer', 'description' => 'Subtask ID'],
+                        'confirm' => ['type' => 'boolean', 'description' => 'Must be true to permanently delete the subtask'],
+                    ],
+                    'required' => ['subtask_id', 'confirm'],
+                ],
+            ],
+        ]);
+
         return [
             'jsonrpc' => '2.0',
             'id' => $id,
@@ -514,11 +733,162 @@ class McpServer extends Base
                         return $this->createToolExecutionErrorResponse('Invalid arguments: name must be a non-empty string', $id);
                     }
 
-                    $projectId = $this->container['projectModel']->create([
-                        'name' => trim($arguments['name']),
-                        'description' => $arguments['description'] ?? ''
-                    ]);
+                    $ownerId = isset($arguments['owner_id']) ? (int) $arguments['owner_id'] : 0;
+                    if ($ownerId < 0) {
+                        return $this->createToolExecutionErrorResponse('Invalid arguments: owner_id must be zero or a positive integer', $id);
+                    }
+
+                    $projectId = $this->container['projectModel']->create(
+                        [
+                            'name' => trim($arguments['name']),
+                            'description' => $arguments['description'] ?? ''
+                        ],
+                        $ownerId,
+                        $ownerId > 0
+                    );
                     $result = ['project_id' => $projectId];
+                    break;
+
+                case 'get_project':
+                    $projectId = isset($arguments['project_id']) ? (int) $arguments['project_id'] : 0;
+                    if ($projectId <= 0) {
+                        return $this->createToolExecutionErrorResponse('Invalid arguments: project_id must be a positive integer', $id);
+                    }
+                    $result = $this->container['projectModel']->getById($projectId);
+                    break;
+
+                case 'update_project':
+                    $projectId = isset($arguments['project_id']) ? (int) $arguments['project_id'] : 0;
+                    if ($projectId <= 0) {
+                        return $this->createToolExecutionErrorResponse('Invalid arguments: project_id must be a positive integer', $id);
+                    }
+
+                    $project = $this->container['projectModel']->getById($projectId);
+                    if (empty($project)) {
+                        return $this->createToolExecutionErrorResponse('Project not found', $id);
+                    }
+
+                    $update = [
+                        'id' => $projectId,
+                        'per_swimlane_task_limits' => (int) ($project['per_swimlane_task_limits'] ?? 0),
+                    ];
+                    if (isset($arguments['name'])) $update['name'] = trim((string) $arguments['name']);
+                    if (array_key_exists('description', $arguments)) $update['description'] = (string) $arguments['description'];
+                    if (isset($arguments['owner_id'])) $update['owner_id'] = (int) $arguments['owner_id'];
+
+                    $updated = $this->container['projectModel']->update($update);
+
+                    if ($updated && isset($arguments['owner_id']) && (int) $arguments['owner_id'] > 0) {
+                        $ownerId = (int) $arguments['owner_id'];
+                        $currentRole = $this->container['projectUserRoleModel']->getUserRole($projectId, $ownerId);
+                        if (empty($currentRole)) {
+                            $this->container['projectUserRoleModel']->addUser($projectId, $ownerId, Role::PROJECT_MANAGER);
+                        } elseif ($currentRole !== Role::PROJECT_MANAGER) {
+                            $this->container['projectUserRoleModel']->changeUserRole($projectId, $ownerId, Role::PROJECT_MANAGER);
+                        }
+                    }
+
+                    $result = ['success' => $updated];
+                    break;
+
+                case 'enable_project':
+                case 'disable_project':
+                    $projectId = isset($arguments['project_id']) ? (int) $arguments['project_id'] : 0;
+                    if ($projectId <= 0) {
+                        return $this->createToolExecutionErrorResponse('Invalid arguments: project_id must be a positive integer', $id);
+                    }
+                    $project = $this->container['projectModel']->getById($projectId);
+                    if (empty($project)) {
+                        return $this->createToolExecutionErrorResponse('Project not found', $id);
+                    }
+                    $projectStatus = $toolName === 'enable_project' ? ProjectModel::ACTIVE : ProjectModel::INACTIVE;
+                    $updated = $this->container['projectModel']->update([
+                        'id' => $projectId,
+                        'is_active' => $projectStatus,
+                        'per_swimlane_task_limits' => (int) ($project['per_swimlane_task_limits'] ?? 0),
+                    ]);
+                    $result = ['success' => $updated, 'is_active' => $projectStatus];
+                    break;
+
+                case 'duplicate_project':
+                    $projectId = isset($arguments['project_id']) ? (int) $arguments['project_id'] : 0;
+                    $ownerId = isset($arguments['owner_id']) ? (int) $arguments['owner_id'] : 0;
+                    if ($projectId <= 0 || $ownerId < 0) {
+                        return $this->createToolExecutionErrorResponse('Invalid arguments: project_id must be positive and owner_id must be zero or positive', $id);
+                    }
+
+                    $selection = [
+                        'projectPermissionModel',
+                        'categoryModel',
+                        'actionModel',
+                        'tagDuplicationModel',
+                        'customFilterModel',
+                        'projectMetadataModel',
+                    ];
+                    if (($arguments['include_tasks'] ?? false) === true) {
+                        $selection[] = 'projectTaskDuplicationModel';
+                    }
+
+                    $newProjectId = $this->container['projectDuplicationModel']->duplicate(
+                        $projectId,
+                        $selection,
+                        $ownerId,
+                        isset($arguments['name']) ? trim((string) $arguments['name']) : null
+                    );
+                    $result = ['project_id' => $newProjectId];
+                    break;
+
+                case 'delete_project':
+                    $projectId = isset($arguments['project_id']) ? (int) $arguments['project_id'] : 0;
+                    if ($projectId <= 0) {
+                        return $this->createToolExecutionErrorResponse('Invalid arguments: project_id must be a positive integer', $id);
+                    }
+                    if (($arguments['confirm'] ?? false) !== true) {
+                        return $this->createToolExecutionErrorResponse('Destructive action requires confirm=true', $id);
+                    }
+                    $result = ['success' => $this->container['projectModel']->remove($projectId)];
+                    break;
+
+                case 'get_project_users':
+                    $projectId = isset($arguments['project_id']) ? (int) $arguments['project_id'] : 0;
+                    if ($projectId <= 0) {
+                        return $this->createToolExecutionErrorResponse('Invalid arguments: project_id must be a positive integer', $id);
+                    }
+                    $result = array_values($this->container['projectUserRoleModel']->getUsers($projectId));
+                    break;
+
+                case 'add_project_user':
+                case 'change_project_user_role':
+                    $projectId = isset($arguments['project_id']) ? (int) $arguments['project_id'] : 0;
+                    $userId = isset($arguments['user_id']) ? (int) $arguments['user_id'] : 0;
+                    $role = $arguments['role'] ?? Role::PROJECT_MEMBER;
+                    $validRoles = [Role::PROJECT_MANAGER, Role::PROJECT_MEMBER, Role::PROJECT_VIEWER];
+
+                    if ($projectId <= 0 || $userId <= 0 || !in_array($role, $validRoles, true)) {
+                        return $this->createToolExecutionErrorResponse('Invalid arguments: project_id/user_id must be positive integers and role must be a valid Kanboard project role', $id);
+                    }
+
+                    $existingRole = $this->container['projectUserRoleModel']->getUserRole($projectId, $userId);
+                    if ($toolName === 'change_project_user_role' && empty($existingRole)) {
+                        return $this->createToolExecutionErrorResponse('User is not currently a member of this project', $id);
+                    }
+
+                    if (empty($existingRole)) {
+                        $changed = $this->container['projectUserRoleModel']->addUser($projectId, $userId, $role);
+                    } else {
+                        $changed = $this->container['projectUserRoleModel']->changeUserRole($projectId, $userId, $role);
+                    }
+
+                    $result = ['success' => $changed, 'role' => $role];
+                    break;
+
+                case 'remove_project_user':
+                    $projectId = isset($arguments['project_id']) ? (int) $arguments['project_id'] : 0;
+                    $userId = isset($arguments['user_id']) ? (int) $arguments['user_id'] : 0;
+                    if ($projectId <= 0 || $userId <= 0) {
+                        return $this->createToolExecutionErrorResponse('Invalid arguments: project_id and user_id must be positive integers', $id);
+                    }
+                    $result = ['success' => $this->container['projectUserRoleModel']->removeUser($projectId, $userId)];
                     break;
                     
                 case 'get_tasks':
@@ -621,6 +991,18 @@ class McpServer extends Base
                     $result = $task;
                     break;
 
+                case 'close_task':
+                case 'reopen_task':
+                    $taskId = isset($arguments['task_id']) ? (int) $arguments['task_id'] : 0;
+                    if ($taskId <= 0) {
+                        return $this->createToolExecutionErrorResponse('Invalid arguments: task_id must be a positive integer', $id);
+                    }
+                    $changed = $toolName === 'close_task'
+                        ? $this->container['taskStatusModel']->close($taskId)
+                        : $this->container['taskStatusModel']->open($taskId);
+                    $result = ['success' => $changed];
+                    break;
+
                 case 'delete_task':
                     if (!isset($arguments['task_id']) || (int) $arguments['task_id'] <= 0) {
                         return $this->createToolExecutionErrorResponse('Invalid arguments: task_id must be a positive integer', $id);
@@ -669,7 +1051,19 @@ class McpServer extends Base
                     
                 case 'get_users':
                     $users = $this->container['userModel']->getAll();
-                    $result = array_values($users);
+                    $result = array_values(array_map(static function (array $user): array {
+                        return [
+                            'id' => (int) $user['id'],
+                            'username' => $user['username'] ?? '',
+                            'name' => $user['name'] ?? null,
+                            'email' => $user['email'] ?? null,
+                            'role' => $user['role'] ?? null,
+                            'is_active' => isset($user['is_active']) ? (int) $user['is_active'] : 0,
+                            'timezone' => $user['timezone'] ?? null,
+                            'language' => $user['language'] ?? null,
+                            'avatar_path' => $user['avatar_path'] ?? null,
+                        ];
+                    }, $users));
                     break;
                     
                 case 'get_task_comments':
@@ -681,6 +1075,71 @@ class McpServer extends Base
                     $result = array_values($comments);
                     break;
                     
+                // Hallman additions - Subtask Management
+                case 'get_subtasks':
+                    $taskId = isset($arguments['task_id']) ? (int) $arguments['task_id'] : 0;
+                    if ($taskId <= 0) {
+                        return $this->createToolExecutionErrorResponse('Invalid arguments: task_id must be a positive integer', $id);
+                    }
+                    $result = array_values($this->container['subtaskModel']->getAll($taskId));
+                    break;
+
+                case 'create_subtask':
+                    $taskId = isset($arguments['task_id']) ? (int) $arguments['task_id'] : 0;
+                    $title = isset($arguments['title']) ? trim((string) $arguments['title']) : '';
+                    if ($taskId <= 0 || $title === '') {
+                        return $this->createToolExecutionErrorResponse('Invalid arguments: task_id must be positive and title must be non-empty', $id);
+                    }
+
+                    $subtaskData = [
+                        'task_id' => $taskId,
+                        'title' => $title,
+                    ];
+                    if (isset($arguments['user_id'])) $subtaskData['user_id'] = (int) $arguments['user_id'];
+                    if (isset($arguments['status'])) $subtaskData['status'] = (int) $arguments['status'];
+
+                    $subtaskId = $this->container['subtaskModel']->create($subtaskData);
+                    $result = ['subtask_id' => $subtaskId];
+                    break;
+
+                case 'update_subtask':
+                    $subtaskId = isset($arguments['subtask_id']) ? (int) $arguments['subtask_id'] : 0;
+                    if ($subtaskId <= 0) {
+                        return $this->createToolExecutionErrorResponse('Invalid arguments: subtask_id must be a positive integer', $id);
+                    }
+
+                    $subtask = $this->container['subtaskModel']->getById($subtaskId);
+                    if (empty($subtask)) {
+                        return $this->createToolExecutionErrorResponse('Subtask not found', $id);
+                    }
+
+                    $values = [
+                        'id' => $subtaskId,
+                        'task_id' => (int) $subtask['task_id'],
+                        'title' => $subtask['title'],
+                        'user_id' => (int) $subtask['user_id'],
+                        'status' => (int) $subtask['status'],
+                        'time_estimated' => (int) $subtask['time_estimated'],
+                        'time_spent' => (int) $subtask['time_spent'],
+                    ];
+                    if (isset($arguments['title'])) $values['title'] = trim((string) $arguments['title']);
+                    if (isset($arguments['user_id'])) $values['user_id'] = (int) $arguments['user_id'];
+                    if (isset($arguments['status'])) $values['status'] = (int) $arguments['status'];
+
+                    $result = ['success' => $this->container['subtaskModel']->update($values)];
+                    break;
+
+                case 'delete_subtask':
+                    $subtaskId = isset($arguments['subtask_id']) ? (int) $arguments['subtask_id'] : 0;
+                    if ($subtaskId <= 0) {
+                        return $this->createToolExecutionErrorResponse('Invalid arguments: subtask_id must be a positive integer', $id);
+                    }
+                    if (($arguments['confirm'] ?? false) !== true) {
+                        return $this->createToolExecutionErrorResponse('Destructive action requires confirm=true', $id);
+                    }
+                    $result = ['success' => $this->container['subtaskModel']->remove($subtaskId)];
+                    break;
+
                 // Administrative Tools - Column Management
                 case 'create_column':
                     if (!isset($arguments['project_id']) || (int) $arguments['project_id'] <= 0 || !isset($arguments['title']) || !is_string($arguments['title']) || trim($arguments['title']) === '') {

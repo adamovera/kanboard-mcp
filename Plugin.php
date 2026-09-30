@@ -10,7 +10,7 @@ use Kanboard\Core\Security\Role;
  * Model Context Protocol Plugin
  *
  * @package  Kanboard\Plugin\ModelContextProtocol
- * @author   Plugin Author
+ * @author   Christian Starr / Hallman.Digital
  */
 class Plugin extends Base
 {
@@ -54,17 +54,17 @@ class Plugin extends Base
 
     public function getPluginAuthor()
     {
-        return 'Christian Starr';
+        return 'Christian Starr / Hallman.Digital';
     }
 
     public function getPluginVersion()
     {
-        return '1.0.0';
+        return '1.1.0';
     }
 
     public function getPluginHomepage()
     {
-        return 'https://github.com/ChristianJStarr/kanboard-mcp';
+        return 'https://github.com/adamovera/kanboard-mcp';
     }
 
     public function getCompatibleVersion()
