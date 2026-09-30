@@ -7,6 +7,7 @@ use Kanboard\Core\Base;
 use Kanboard\Core\Security\Role;
 use Kanboard\Model\ColumnModel;
 use Kanboard\Model\ProjectModel;
+use Kanboard\Model\SubtaskModel;
 use Kanboard\Model\TaskModel;
 use InvalidArgumentException;
 use Throwable;
@@ -606,6 +607,91 @@ class McpServer extends Base
                     'required' => ['task_id'],
                 ],
             ],
+            [
+                'name' => 'duplicate_project',
+                'description' => 'Duplicate a project structure and optionally its permissions, categories, actions, tags, filters, metadata, and tasks',
+                'inputSchema' => [
+                    'type' => 'object',
+                    'properties' => [
+                        'project_id' => ['type' => 'integer', 'description' => 'Source project ID'],
+                        'owner_id' => ['type' => 'integer', 'description' => 'Owner/user ID for the duplicated project'],
+                        'name' => ['type' => 'string', 'description' => 'Optional name for the duplicated project'],
+                        'include_tasks' => ['type' => 'boolean', 'description' => 'Copy tasks as well as project structure', 'default' => false],
+                    ],
+                    'required' => ['project_id'],
+                ],
+            ],
+            [
+                'name' => 'delete_project',
+                'description' => 'Permanently delete a project. Requires confirm=true.',
+                'inputSchema' => [
+                    'type' => 'object',
+                    'properties' => [
+                        'project_id' => ['type' => 'integer', 'description' => 'Project ID'],
+                        'confirm' => ['type' => 'boolean', 'description' => 'Must be true to permanently delete the project'],
+                    ],
+                    'required' => ['project_id', 'confirm'],
+                ],
+            ],
+            [
+                'name' => 'get_subtasks',
+                'description' => 'List subtasks for a task',
+                'inputSchema' => [
+                    'type' => 'object',
+                    'properties' => [
+                        'task_id' => ['type' => 'integer', 'description' => 'Task ID'],
+                    ],
+                    'required' => ['task_id'],
+                ],
+            ],
+            [
+                'name' => 'create_subtask',
+                'description' => 'Create a subtask',
+                'inputSchema' => [
+                    'type' => 'object',
+                    'properties' => [
+                        'task_id' => ['type' => 'integer', 'description' => 'Task ID'],
+                        'title' => ['type' => 'string', 'description' => 'Subtask title'],
+                        'user_id' => ['type' => 'integer', 'description' => 'Optional assignee user ID'],
+                        'status' => [
+                            'type' => 'integer',
+                            'description' => '0 Todo, 1 In progress, 2 Done',
+                            'enum' => [SubtaskModel::STATUS_TODO, SubtaskModel::STATUS_INPROGRESS, SubtaskModel::STATUS_DONE],
+                        ],
+                    ],
+                    'required' => ['task_id', 'title'],
+                ],
+            ],
+            [
+                'name' => 'update_subtask',
+                'description' => 'Update a subtask title, assignee, or status',
+                'inputSchema' => [
+                    'type' => 'object',
+                    'properties' => [
+                        'subtask_id' => ['type' => 'integer', 'description' => 'Subtask ID'],
+                        'title' => ['type' => 'string', 'description' => 'Subtask title'],
+                        'user_id' => ['type' => 'integer', 'description' => 'Assignee user ID, 0 for unassigned'],
+                        'status' => [
+                            'type' => 'integer',
+                            'description' => '0 Todo, 1 In progress, 2 Done',
+                            'enum' => [SubtaskModel::STATUS_TODO, SubtaskModel::STATUS_INPROGRESS, SubtaskModel::STATUS_DONE],
+                        ],
+                    ],
+                    'required' => ['subtask_id'],
+                ],
+            ],
+            [
+                'name' => 'delete_subtask',
+                'description' => 'Permanently delete a subtask. Requires confirm=true.',
+                'inputSchema' => [
+                    'type' => 'object',
+                    'properties' => [
+                        'subtask_id' => ['type' => 'integer', 'description' => 'Subtask ID'],
+                        'confirm' => ['type' => 'boolean', 'description' => 'Must be true to permanently delete the subtask'],
+                    ],
+                    'required' => ['subtask_id', 'confirm'],
+                ],
+            ],
         ]);
 
         return [
@@ -722,6 +808,45 @@ class McpServer extends Base
                         'per_swimlane_task_limits' => (int) ($project['per_swimlane_task_limits'] ?? 0),
                     ]);
                     $result = ['success' => $updated, 'is_active' => $projectStatus];
+                    break;
+
+                case 'duplicate_project':
+                    $projectId = isset($arguments['project_id']) ? (int) $arguments['project_id'] : 0;
+                    $ownerId = isset($arguments['owner_id']) ? (int) $arguments['owner_id'] : 0;
+                    if ($projectId <= 0 || $ownerId < 0) {
+                        return $this->createToolExecutionErrorResponse('Invalid arguments: project_id must be positive and owner_id must be zero or positive', $id);
+                    }
+
+                    $selection = [
+                        'projectPermissionModel',
+                        'categoryModel',
+                        'actionModel',
+                        'tagDuplicationModel',
+                        'customFilterModel',
+                        'projectMetadataModel',
+                    ];
+                    if (($arguments['include_tasks'] ?? false) === true) {
+                        $selection[] = 'projectTaskDuplicationModel';
+                    }
+
+                    $newProjectId = $this->container['projectDuplicationModel']->duplicate(
+                        $projectId,
+                        $selection,
+                        $ownerId,
+                        isset($arguments['name']) ? trim((string) $arguments['name']) : null
+                    );
+                    $result = ['project_id' => $newProjectId];
+                    break;
+
+                case 'delete_project':
+                    $projectId = isset($arguments['project_id']) ? (int) $arguments['project_id'] : 0;
+                    if ($projectId <= 0) {
+                        return $this->createToolExecutionErrorResponse('Invalid arguments: project_id must be a positive integer', $id);
+                    }
+                    if (($arguments['confirm'] ?? false) !== true) {
+                        return $this->createToolExecutionErrorResponse('Destructive action requires confirm=true', $id);
+                    }
+                    $result = ['success' => $this->container['projectModel']->remove($projectId)];
                     break;
 
                 case 'get_project_users':
@@ -950,6 +1075,71 @@ class McpServer extends Base
                     $result = array_values($comments);
                     break;
                     
+                // Hallman additions - Subtask Management
+                case 'get_subtasks':
+                    $taskId = isset($arguments['task_id']) ? (int) $arguments['task_id'] : 0;
+                    if ($taskId <= 0) {
+                        return $this->createToolExecutionErrorResponse('Invalid arguments: task_id must be a positive integer', $id);
+                    }
+                    $result = array_values($this->container['subtaskModel']->getAll($taskId));
+                    break;
+
+                case 'create_subtask':
+                    $taskId = isset($arguments['task_id']) ? (int) $arguments['task_id'] : 0;
+                    $title = isset($arguments['title']) ? trim((string) $arguments['title']) : '';
+                    if ($taskId <= 0 || $title === '') {
+                        return $this->createToolExecutionErrorResponse('Invalid arguments: task_id must be positive and title must be non-empty', $id);
+                    }
+
+                    $subtaskData = [
+                        'task_id' => $taskId,
+                        'title' => $title,
+                    ];
+                    if (isset($arguments['user_id'])) $subtaskData['user_id'] = (int) $arguments['user_id'];
+                    if (isset($arguments['status'])) $subtaskData['status'] = (int) $arguments['status'];
+
+                    $subtaskId = $this->container['subtaskModel']->create($subtaskData);
+                    $result = ['subtask_id' => $subtaskId];
+                    break;
+
+                case 'update_subtask':
+                    $subtaskId = isset($arguments['subtask_id']) ? (int) $arguments['subtask_id'] : 0;
+                    if ($subtaskId <= 0) {
+                        return $this->createToolExecutionErrorResponse('Invalid arguments: subtask_id must be a positive integer', $id);
+                    }
+
+                    $subtask = $this->container['subtaskModel']->getById($subtaskId);
+                    if (empty($subtask)) {
+                        return $this->createToolExecutionErrorResponse('Subtask not found', $id);
+                    }
+
+                    $values = [
+                        'id' => $subtaskId,
+                        'task_id' => (int) $subtask['task_id'],
+                        'title' => $subtask['title'],
+                        'user_id' => (int) $subtask['user_id'],
+                        'status' => (int) $subtask['status'],
+                        'time_estimated' => (int) $subtask['time_estimated'],
+                        'time_spent' => (int) $subtask['time_spent'],
+                    ];
+                    if (isset($arguments['title'])) $values['title'] = trim((string) $arguments['title']);
+                    if (isset($arguments['user_id'])) $values['user_id'] = (int) $arguments['user_id'];
+                    if (isset($arguments['status'])) $values['status'] = (int) $arguments['status'];
+
+                    $result = ['success' => $this->container['subtaskModel']->update($values)];
+                    break;
+
+                case 'delete_subtask':
+                    $subtaskId = isset($arguments['subtask_id']) ? (int) $arguments['subtask_id'] : 0;
+                    if ($subtaskId <= 0) {
+                        return $this->createToolExecutionErrorResponse('Invalid arguments: subtask_id must be a positive integer', $id);
+                    }
+                    if (($arguments['confirm'] ?? false) !== true) {
+                        return $this->createToolExecutionErrorResponse('Destructive action requires confirm=true', $id);
+                    }
+                    $result = ['success' => $this->container['subtaskModel']->remove($subtaskId)];
+                    break;
+
                 // Administrative Tools - Column Management
                 case 'create_column':
                     if (!isset($arguments['project_id']) || (int) $arguments['project_id'] <= 0 || !isset($arguments['title']) || !is_string($arguments['title']) || trim($arguments['title']) === '') {
