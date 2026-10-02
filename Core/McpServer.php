@@ -126,7 +126,7 @@ class McpServer extends Base
                     'serverInfo' => [
                         'name' => 'kanboard-mcp',
                         'title' => 'Kanboard MCP Server',
-                        'version' => '1.1.0',
+                        'version' => '1.2.0',
                         'description' => 'Kanboard project-management tools and resources via MCP.',
                     ],
                     'instructions' => 'Use the available Kanboard tools to manage projects, tasks, columns, categories, and swimlanes.',
@@ -692,6 +692,25 @@ class McpServer extends Base
                     'required' => ['subtask_id', 'confirm'],
                 ],
             ],
+            [
+                'name' => 'get_custom_css',
+                'description' => 'Get the active Customizer theme CSS and current theme selection',
+                'inputSchema' => [
+                    'type' => 'object',
+                    'additionalProperties' => false,
+                ],
+            ],
+            [
+                'name' => 'set_custom_css',
+                'description' => 'Set the Hallman Customizer CSS theme and activate it globally',
+                'inputSchema' => [
+                    'type' => 'object',
+                    'properties' => [
+                        'css' => ['type' => 'string', 'description' => 'Complete CSS stylesheet to save as the Hallman theme'],
+                    ],
+                    'required' => ['css'],
+                ],
+            ],
         ]);
 
         return [
@@ -1138,6 +1157,65 @@ class McpServer extends Base
                         return $this->createToolExecutionErrorResponse('Destructive action requires confirm=true', $id);
                     }
                     $result = ['success' => $this->container['subtaskModel']->remove($subtaskId)];
+                    break;
+
+                // Hallman additions - Customizer CSS
+                case 'get_custom_css':
+                    $pluginFolder = basename(PLUGINS_DIR);
+                    $themeSelection = $this->container['configModel']->get(
+                        'themeSelection',
+                        $pluginFolder . '/Customizer/Assets/css/theme.css'
+                    );
+
+                    $hallmanSource = DATA_DIR . '/files/customizer/themes/Hallman.css';
+                    $selectedCss = '';
+                    $source = null;
+
+                    if (file_exists($hallmanSource)) {
+                        $selectedCss = (string) file_get_contents($hallmanSource);
+                        $source = $hallmanSource;
+                    } else {
+                        $candidate = dirname(__DIR__, 2) . '/' . ltrim($themeSelection, '/');
+                        if (file_exists($candidate)) {
+                            $selectedCss = (string) file_get_contents($candidate);
+                            $source = $candidate;
+                        }
+                    }
+
+                    $result = [
+                        'theme_selection' => $themeSelection,
+                        'source' => $source,
+                        'css' => $selectedCss,
+                    ];
+                    break;
+
+                case 'set_custom_css':
+                    if (!isset($arguments['css']) || !is_string($arguments['css'])) {
+                        return $this->createToolExecutionErrorResponse('Invalid arguments: css must be a string', $id);
+                    }
+
+                    $themeDir = DATA_DIR . '/files/customizer/themes';
+                    if (!is_dir($themeDir) && !mkdir($themeDir, 0755, true) && !is_dir($themeDir)) {
+                        return $this->createToolExecutionErrorResponse('Unable to create Customizer theme directory', $id);
+                    }
+
+                    $themeFile = $themeDir . '/Hallman.css';
+                    $bytes = file_put_contents($themeFile, $arguments['css']);
+                    if ($bytes === false) {
+                        return $this->createToolExecutionErrorResponse('Unable to write Hallman.css', $id);
+                    }
+
+                    $pluginFolder = basename(PLUGINS_DIR);
+                    $themeSelection = $pluginFolder . '/Customizer/Assets/css/userthemes/Hallman.css';
+                    $saved = $this->container['configModel']->save([
+                        'themeSelection' => $themeSelection,
+                    ]);
+
+                    $result = [
+                        'success' => (bool) $saved,
+                        'bytes_written' => $bytes,
+                        'theme_selection' => $themeSelection,
+                    ];
                     break;
 
                 // Administrative Tools - Column Management
